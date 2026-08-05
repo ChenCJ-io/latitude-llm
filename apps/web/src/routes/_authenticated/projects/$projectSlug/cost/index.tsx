@@ -9,6 +9,7 @@ import {
   useCostPerSessionDecomposition,
   useCostSeries,
   useModelUsageSeries,
+  useWastedSpend,
 } from "../../../../../domains/cost/cost.collection.ts"
 import { useFeatureFlagGate } from "../../../../../domains/feature-flags/feature-flags.collection.ts"
 import { useAnalyticsTimeWindow } from "../../../../../domains/projects/use-analytics-time-window.ts"
@@ -35,6 +36,7 @@ import { CostOverTimePanel } from "./-components/cost-over-time-panel.tsx"
 import { CostPerSessionPanel } from "./-components/cost-per-session-panel.tsx"
 import { ModelImpactPanel } from "./-components/model-impact-panel.tsx"
 import { ModelUsagePanel } from "./-components/model-usage-panel.tsx"
+import { WastedSpendPanel } from "./-components/wasted-spend-panel.tsx"
 
 function CostBreadcrumb() {
   return <BreadcrumbText variant="current">Cost</BreadcrumbText>
@@ -59,6 +61,7 @@ export const Route = createFileRoute("/_authenticated/projects/$projectSlug/cost
 })
 
 function CostPageContent() {
+  const { projectSlug } = Route.useParams()
   const project = useRouteProject()
   const { firstTraceAt } = useProjectFirstTraceAt({ projectId: project.id })
   const { lastTraceAt } = useProjectLastTraceAt({ projectId: project.id })
@@ -115,6 +118,11 @@ function CostPageContent() {
     projectId: project.id,
     range,
     bucketSeconds,
+    enabled,
+  })
+  const { data: wastedSpend, isLoading: wastedSpendLoading } = useWastedSpend({
+    projectId: project.id,
+    range,
     enabled,
   })
   const { data: cacheEconomics, isLoading: cacheEconomicsLoading } = useCacheEconomics({
@@ -212,6 +220,15 @@ function CostPageContent() {
           rangeToIso={range.toIso}
           isAllTime={tw.isAllTime}
           isLoading={seriesLoading}
+        />
+        <SectionHeading>Waste</SectionHeading>
+        <WastedSpendPanel
+          record={wastedSpend}
+          projectSlug={projectSlug}
+          rangeFromIso={range.fromIso}
+          rangeToIso={range.toIso}
+          isAllTime={tw.isAllTime}
+          isLoading={wastedSpendLoading}
         />
         <SectionHeading>Session</SectionHeading>
         <CostPerSessionPanel
