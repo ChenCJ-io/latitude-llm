@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import { TimeFilterDropdown } from "../../../../../components/time-filter-dropdown.tsx"
 import {
   useCacheEconomics,
+  useCacheFindingSignals,
   useCostBreakdown,
   useCostOverview,
   useCostPerSessionDecomposition,
@@ -122,6 +123,7 @@ function CostPageContent() {
     range,
     enabled,
   })
+  const { data: cacheFindingSignals } = useCacheFindingSignals({ projectId: project.id, enabled })
   const { data: breakdown, isLoading: breakdownLoading } = useCostBreakdown({
     projectId: project.id,
     range,
@@ -248,7 +250,12 @@ function CostPageContent() {
           </div>
         </div>
         <SectionHeading>Cache</SectionHeading>
-        <CacheEconomicsPanel economics={cacheEconomics} isLoading={cacheEconomicsLoading} />
+        <CacheEconomicsPanel
+          economics={cacheEconomics}
+          isLoading={cacheEconomicsLoading}
+          projectSlug={project.slug}
+          findingSignals={cacheFindingSignals}
+        />
         <CostBreakdownPanel
           breakdown={breakdown}
           dimension={dimension}

@@ -1,6 +1,7 @@
-import { CACHE_ECONOMICS_MIN_CALLS, CACHE_MIN_CACHEABLE_INPUT_TOKENS } from "@domain/spans"
+import { CACHE_ECONOMICS_MIN_CALLS, CACHE_MIN_CACHEABLE_INPUT_TOKENS, cacheFindingFingerprint } from "@domain/spans"
 import type { TextColor } from "@repo/ui"
 import {
+  Badge,
   cn,
   Icon,
   Table,
@@ -14,6 +15,7 @@ import {
   Tooltip,
 } from "@repo/ui"
 import { formatCount, formatDuration, formatPercentage, formatPrice } from "@repo/utils"
+import { Link } from "@tanstack/react-router"
 import {
   CircleCheckIcon,
   CircleIcon,
@@ -21,12 +23,13 @@ import {
   ClockIcon,
   GaugeIcon,
   InfoIcon,
+  RadioTowerIcon,
   SearchIcon,
   TableIcon,
   TriangleAlertIcon,
 } from "lucide-react"
 import { Fragment, useState } from "react"
-import type { CacheEconomicsRecord } from "../../../../../../domains/cost/cost.functions.ts"
+import type { CacheEconomicsRecord, CacheFindingSignalRecord } from "../../../../../../domains/cost/cost.functions.ts"
 import { rollupCostDisplay } from "../../../../../../domains/spans/cost-display.ts"
 import {
   buildCacheStateGroups,
@@ -37,6 +40,7 @@ import {
   type CacheRowView,
   type CacheStateGroup,
   type CacheSummary,
+  cacheStateIsActionable,
   parseCacheLifetimeSelection,
   recoverableShare,
 } from "./cache-economics-view.ts"
@@ -296,7 +300,36 @@ function SavingsCell({ row }: { readonly row: CacheRowView }) {
   )
 }
 
-function CacheRow({ row }: { readonly row: CacheRowView }) {
+/**
+ * The open cost signal for this row, or null.
+ *
+ * Matched on the fingerprint the producer wrote, computed here by the same shared
+ * function — so the panel never decides for itself which verdicts deserve escalating and
+ * cannot claim a signal exists that the inbox does not hold.
+ */
+function signalFor(
+  row: CacheRowView,
+  signals: ReadonlyMap<string, CacheFindingSignalRecord>,
+): CacheFindingSignalRecord | null {
+  if (!cacheStateIsActionable(row.judgment.state)) return null
+  // Only the documented lifetime can carry a signal; a lifetime the reader picked is their
+  // assumption, and pinning the inbox's badge to it would attribute it to us.
+  if (!row.isDocumented) return null
+  return (
+    signals.get(cacheFindingFingerprint({ provider: row.provider, model: row.model, state: row.judgment.state })) ??
+    null
+  )
+}
+
+function CacheRow({
+  row,
+  projectSlug,
+  signal,
+}: {
+  readonly row: CacheRowView
+  readonly projectSlug: string
+  readonly signal: CacheFindingSignalRecord | null
+}) {
   const spend = rollupCostDisplay({
     costTotalMicrocents: row.costMicrocents,
     unpricedSpanCount: row.unpricedCalls,
@@ -313,6 +346,19 @@ function CacheRow({ row }: { readonly row: CacheRowView }) {
           <Text.H6 color="foregroundMuted" ellipsis noWrap>
             {row.provider || "unknown provider"}
           </Text.H6>
+          {signal ? (
+            <Link
+              to="/projects/$projectSlug/signals/$signalSlug"
+              params={{ projectSlug, signalSlug: signal.signalSlug }}
+              aria-label={`Open the ${signal.signalSlug} signal for ${row.model}`}
+              className="inline-flex shrink-0"
+            >
+              <Badge variant="secondary" size="small" className="cursor-pointer gap-1 hover:bg-muted">
+                <Icon icon={RadioTowerIcon} size="sm" color="foregroundMuted" />
+                {signal.signalSlug}
+              </Badge>
+            </Link>
+          ) : null}
           {row.verdictDependsOnLifetime ? (
             <Tooltip
               asChild
@@ -587,10 +633,15 @@ function CacheSummaryView({
 export function CacheEconomicsPanel({
   economics,
   isLoading,
+  projectSlug,
+  findingSignals,
 }: {
   readonly economics: CacheEconomicsRecord | undefined
   readonly isLoading: boolean
+  readonly projectSlug: string
+  readonly findingSignals: readonly CacheFindingSignalRecord[] | undefined
 }) {
+  const signalsByFingerprint = new Map((findingSignals ?? []).map((signal) => [signal.fingerprint, signal]))
   const [selection, setSelection] = useState<CacheLifetimeSelection>("documented")
   const [view, setView] = useState<CacheView>("summary")
   const [sort, setSort] = useState<{ column: CacheSortColumn; direction: "asc" | "desc" }>({
@@ -697,7 +748,12 @@ export function CacheEconomicsPanel({
               <Fragment key={group.key}>
                 <StateGroupHeader group={group} />
                 {group.rows.map((row) => (
-                  <CacheRow key={`${row.provider}/${row.model}`} row={row} />
+                  <CacheRow
+                    key={`${row.provider}/${row.model}`}
+                    row={row}
+                    projectSlug={projectSlug}
+                    signal={signalFor(row, signalsByFingerprint)}
+                  />
                 ))}
               </Fragment>
             ))}
